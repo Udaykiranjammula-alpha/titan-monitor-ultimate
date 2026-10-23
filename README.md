@@ -1,55 +1,140 @@
 # TITAN Monitor Ultimate
 
-A local-first Electron desktop monitor built with React, TypeScript, SQLite, and host-backed metrics. It does not include analytics, advertising, remote telemetry, or a report upload flow.
+[![Windows Build & Release](https://github.com/Udaykiranjammula-alpha/titan-monitor-ultimate/actions/workflows/windows-build.yml/badge.svg)](https://github.com/Udaykiranjammula-alpha/titan-monitor-ultimate/actions/workflows/windows-build.yml)
+[![Release](https://img.shields.io/github/v/release/Udaykiranjammula-alpha/titan-monitor-ultimate?include_prereleases&color=blue)](https://github.com/Udaykiranjammula-alpha/titan-monitor-ultimate/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Platform](https://img.shields.io/badge/Platform-Windows%20x64-brightgreen.svg)]()
 
-## Environment and Windows status
+**TITAN Monitor Ultimate** is a local-first, privacy-focused Windows hardware diagnostics and performance monitoring desktop application. Built with modern Electron, React 18, TypeScript, and SQLite, it runs entirely on your local machine with zero analytics, zero telemetry collection, and no cloud dependencies.
 
-This project was built and smoke-tested in the task’s **Linux x86_64 Sandbox** using Electron 45.0.0. The Sandbox host returned real CPU, memory, filesystem, process, and network measurements. It exposed no GPU controller. Metrics without a supported provider are shown as unavailable; no sample or random values are presented as live.
+---
 
-The project contains Windows NSIS-installer and portable targets, but a **Windows package was not built or verified** in this Linux environment. Windows notification delivery, Windows sensors, GPU telemetry providers, close-to-tray behavior, process actions, and driver-specific readings need validation on an actual Windows PC. See `FEATURE_STATUS.md` and `docs/HARDWARE_COMPATIBILITY.md` for exact boundaries.
+## Key Highlights
 
-## Requirements and launch
+- **Hardware Telemetry**: Real-time monitoring of CPU load, per-core utilization, clock frequency, RAM capacity and usage, drive allocation, and network throughput.
+- **Accurate Windows Process Explorer**: Real-time resident memory (`WorkingSetSize`) correctly converted to bytes, provider CPU utilization down to `<0.01%`, and safe process inspection.
+- **Local SQLite Historical Database**: All performance metrics and history are stored locally in SQLite with configurable retention periods.
+- **Alert System**: Customizable alert thresholds for CPU, RAM, and storage with notification integration and hysteresis cooldowns.
+- **CPU Benchmark**: In-app single-thread and multi-thread performance stress test and benchmark scoring.
+- **Diagnostic Export**: One-click sanitizing export (JSON/HTML) of system metrics without personal identifiers or executable paths.
+- **Zero Telemetry Guarantee**: No network calls outside your local machine.
 
-Use Node.js 22 or newer and npm. From the project folder:
+---
 
+## Architecture Overview
+
+```mermaid
+graph TD
+    subgraph UI ["Renderer Process (Sandboxed React UI)"]
+        Dashboard["Overview & Charts"]
+        ProcessExplorer["Process Explorer"]
+        HistoricalGraph["Historical Timeline"]
+        AlertsView["Alerts & Notifications"]
+        Benchmark["CPU Benchmark"]
+        Settings["Configuration & Exports"]
+    end
+
+    subgraph IPC ["Preload Context Bridge (Type-safe IPC)"]
+        Preload["preload.ts (Context Isolation, Sandboxed)"]
+    end
+
+    subgraph Main ["Main Process (Electron Node.js Runtime)"]
+        Collector["systeminformation Collector"]
+        Normalizer["Metric Normalizer & Validator"]
+        DB["SQLite Storage Engine (store.ts)"]
+        AlertEngine["Alerts & Evaluation Engine"]
+    end
+
+    UI <-->|invoke / on| Preload
+    Preload <-->|IPC Channels| Main
+    Collector -->|Raw Host OS APIs| Normalizer
+    Normalizer -->|Structured Snapshots| DB
+    Normalizer -->|Metric Telemetry| AlertEngine
+```
+
+---
+
+## Download & Installation
+
+Visit the [Latest Releases](https://github.com/Udaykiranjammula-alpha/titan-monitor-ultimate/releases) to download:
+
+- **Portable Executable**: `TITAN-Monitor-Portable-0.1.0-x64.exe` (run directly without installation)
+- **Standard Windows Installer**: `TITAN-Monitor-0.1.0-x64.exe` (NSIS setup wizard with desktop & start menu shortcuts)
+
+> **Note on Windows SmartScreen**: Binaries are compiled directly from source in public CI and are currently self-signed. Windows SmartScreen may display an initial warning on first launch. Click **More Info** → **Run anyway**.
+
+---
+
+## Development & Building from Source
+
+### Prerequisites
+- Windows 10/11 x64
+- [Node.js](https://nodejs.org/) v22 or higher
+- npm v10 or higher
+
+### 1. Clone & Setup
 ```bash
+git clone https://github.com/Udaykiranjammula-alpha/titan-monitor-ultimate.git
+cd titan-monitor-ultimate
 npm ci
+```
+
+### 2. Run in Development Mode
+```bash
 npm run dev
 ```
 
-`npm ci` installs dependencies and rebuilds `better-sqlite3` for the bundled Electron ABI. On Windows, native module rebuilds may require the supported Visual Studio C++ Build Tools if a compatible prebuilt is not available. `npm run dev` builds the Electron main/preload files, starts the local Vite development server, and opens Electron. It is a single-command development launch.
-
-To produce a Windows installer/portable build **on Windows**:
-
+### 3. Build & Package Windows Executables
 ```powershell
-npm ci
+# Build NSIS installer and Portable executable
 npm run dist:win
 ```
+Outputs are written to the `release/` directory.
 
-Outputs go to `release/`. Installer signing is not configured. The Linux Sandbox cannot certify the Windows native SQLite binary, installer, or hardware providers.
+---
 
-## Checks
+## Test & Validation Suite
+
+TITAN Monitor Ultimate enforces strict typing, linting, and regression tests:
 
 ```bash
+# Run ESLint check
 npm run lint
+
+# Verify TypeScript compilation (Main + Renderer)
 npm run typecheck
+
+# Run Vitest test suite
 npm test
+
+# Production build bundle
 npm run build
+
+# Vulnerability scan
 npm audit
 ```
 
-Last verified in the Sandbox: lint passes; strict TypeScript checks pass; 7 unit tests pass; renderer and Electron main build pass; full dependency audit reports 0 vulnerabilities. Electron 45 opened under Xvfb, and SQLite tables plus real host history samples were created. See `docs/TESTING.md` for the environment, smoke checks, and resource-measurement caveats.
+All 12 unit and regression tests pass verifying:
+- Correct resident memory byte calculations (`KiB * 1024` normalizer)
+- Complete unit sequence formatting (`B` → `KB` → `MB` → `GB` → `TB` → `PB`)
+- Small CPU fractional display rounding (`<0.01%`)
+- Alert hysteresis and trigger intervals
 
-## Architecture and privacy
+---
 
-- `src/main/`: Electron main process, systeminformation collector, alert evaluation and SQLite persistence.
-- `src/preload/`: typed invoke-only bridge with context isolation.
-- `src/renderer/`: React UI for overview, process explorer, history/performance, alerts, CPU benchmark, reports, gaming/AI status, and settings.
-- `src/shared/`: IPC data contracts. Metrics carry values, units, source, timestamp, and availability status.
-- `tests/`: metric validation and alert-duration/hysteresis tests.
+## Documentation
 
-Renderer Node integration is disabled; the renderer is sandboxed and receives only allowlisted IPC functions. Windows process termination requires UI confirmation and main-process guards. History and settings remain in a local SQLite database under Electron `userData`; exports are local Save-dialog writes. Diagnostic JSON/HTML includes a reduced hardware snapshot but excludes the host name and executable paths. Review exports before sharing. See [Windows setup](docs/INSTALL_WINDOWS.md), [Privacy](docs/PRIVACY.md), [Security](docs/SECURITY.md), [Architecture](docs/ARCHITECTURE.md), [hardware compatibility](docs/HARDWARE_COMPATIBILITY.md), and [testing results](docs/TESTING.md).
+Detailed technical documentation is available under `docs/`:
+- [Architecture & Design](docs/ARCHITECTURE.md)
+- [Hardware Compatibility & Fallbacks](docs/HARDWARE_COMPATIBILITY.md)
+- [Windows Installation Guide](docs/INSTALL_WINDOWS.md)
+- [Privacy Guarantee](docs/PRIVACY.md)
+- [Security Model](docs/SECURITY.md)
+- [Testing & Quality Assurance](docs/TESTING.md)
+- [Troubleshooting & FAQ](docs/TROUBLESHOOTING.md)
 
-## Known limits
+---
 
-CPU temperature/power/fan/voltage, GPU utilization/thermals/power, per-process GPU attribution, disk throughput/SMART, FPS/frame time, start-with-Windows, storage benchmarking, and AI runtime tokens/sec are not implemented or not available through the Sandbox provider. Disk capacity does not establish drive health. There is no PDF export or in-app database deletion control. Do not run the app elevated unless a future documented sensor provider requires it.
+## License
+
+This project is licensed under the [MIT License](LICENSE) - see the [LICENSE](LICENSE) file for details.

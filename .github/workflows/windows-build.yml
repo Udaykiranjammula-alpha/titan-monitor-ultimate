@@ -41,7 +41,9 @@ jobs:
         run: npm run build
 
       - name: Package Windows executable & installer
-        run: npm run dist:win
+        run: npx electron-builder --win nsis portable --publish never
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload Windows build artifacts
         uses: actions/upload-artifact@v4
@@ -69,3 +71,5 @@ jobs:
           draft: false
           prerelease: false
           generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
